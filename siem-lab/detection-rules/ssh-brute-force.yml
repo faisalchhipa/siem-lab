@@ -1,0 +1,33 @@
+# SSH Brute Force Detection Rule
+# Detects multiple failed SSH login attempts within a short time window
+
+detection:
+  name: SSH Brute Force Attack
+  description: Detects potential SSH brute force attacks based on multiple failed login attempts from a single source
+  severity: high
+  category: credential_access
+  technique: T1110 - Brute Force
+  
+  selection:
+    - event_type: 'cowrie.login.failed'
+    - source.ip|cidr: '$HOME_NET'
+  
+  timeframe: 5m
+  condition: selection | count() by source.ip > 5
+
+  falsepositives:
+    - Legitimate users forgetting passwords
+    - Automated scripts with wrong credentials
+  
+  level: high
+
+alert:
+  - elasticsearch
+  - email
+
+elasticsearch:
+  index: cowrie-*
+  
+email:
+  to: security@example.com
+  subject: "SIEM Alert: SSH Brute Force Detected"

@@ -1,0 +1,40 @@
+# Suspicious DNS Query Detection
+# Detects DNS queries to known malicious domains or unusual patterns
+
+detection:
+  name: Suspicious DNS Query
+  description: Detects DNS queries to suspicious domains or high-frequency queries indicating potential DNS tunneling
+  severity: medium
+  category: command_and_control
+  technique: T1071.004 - Application Layer Protocol: DNS
+  
+  selection_suspicious_domain:
+    - dns.query.name|endswith:
+      - '.tk'
+      - '.ml'
+      - '.cf'
+      - '.ga'
+      - '.top'
+      - '.xyz'
+      - '.bid'
+      - '.download'
+      - '.work'
+  
+  selection_high_frequency:
+    - event.category: dns
+    - source.ip|cidr: '$HOME_NET'
+  
+  timeframe: 1m
+  condition: selection_suspicious_domain or (selection_high_frequency | count() by source.ip > 50)
+
+  falsepositives:
+    - Legitimate use of free domain services
+    - DNS-based load balancing services
+  
+  level: medium
+
+alert:
+  - elasticsearch
+
+elasticsearch:
+  index: zeek-*

@@ -1,0 +1,57 @@
+# Cowrie User Database
+# Format: username:x:password
+# x indicates password authentication is enabled
+
+# Common weak credentials that attackers try
+root:x:root
+root:x:password
+root:x:123456
+root:x:admin
+root:x:toor
+root:x:ubuntu
+root:x:12345678
+root:x:qwerty
+root:x:123456789
+root:x:letmein
+root:x:welcome
+root:x:password1
+root:x:1234567890
+root:x:admin123
+root:x:login
+root:x:passw0rd
+root:x:master
+root:x:shadow
+root:x:dragon
+
+guest:x:guest
+guest:x:password
+guest:x:123456
+
+admin:x:admin
+admin:x:password
+admin:x:123456
+admin:x:root
+
+test:x:test
+test:x:password
+test:x:123456
+
+user:x:user
+user:x:password
+user:x:123456
+
+oracle:x:oracle
+oracle:x:password
+oracle:x:123456
+
+mysql:x:mysql
+mysql:x:password
+mysql:x:root
+
+postgres:x:postgres
+postgres:x:password
+postgres:x:admin
+
+ubuntu:x:ubuntu
+ubuntu:x:password
+ubuntu:x:root

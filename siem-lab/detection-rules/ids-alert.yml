@@ -1,0 +1,40 @@
+# IDS Alert Detection
+# Detects high-severity alerts from Suricata IDS
+
+detection:
+  name: IDS High Severity Alert
+  description: Detects high and critical severity alerts from Suricata IDS
+  severity: high
+  category: intrusion_detection
+  technique: multiple
+  
+  selection:
+    - suricata.alert.severity|lte: 2
+    - suricata.alert.category|contains:
+      - 'Attempted Administrator Privilege Gain'
+      - 'Attempted User Privilege Gain'
+      - 'Executable code was detected'
+      - 'A suspicious file was detected'
+      - 'A system call was detected'
+      - 'Successful Administrator Privilege Gain'
+      - 'Successful User Privilege Gain'
+  
+  timeframe: 1m
+  condition: selection
+
+  falsepositives:
+    - False positive signatures
+    - Legitimate administrative activity
+  
+  level: high
+
+alert:
+  - elasticsearch
+  - email
+
+elasticsearch:
+  index: suricata-*
+  
+email:
+  to: security@example.com
+  subject: "SIEM Alert: High Severity IDS Alert"

@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+  # Elasticsearch - Log storage and search
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: siem-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - cluster.name=siem-cluster
+      - node.name=siem-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - siem-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Logstash - Log ingestion and parsing
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: siem-logstash
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - logstash-data:/usr/share/logstash/data
+    ports:
+      - "5044:5044"
+      - "5045:5045/udp"
+      - "9600:9600"
+    environment:
+      - LS_JAVA_OPTS=-Xms1g -Xmx1g
+      - LOGSTASH_INTERNAL_PASSWORD=${LOGSTASH_INTERNAL_PASSWORD:-}
+    networks:
+      - siem-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Kibana - Visualization and dashboards
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: siem-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+    volumes:
+      - ./kibana/dashboards:/usr/share/kibana/dashboards:ro
+    networks:
+      - siem-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Filebeat - Log shipping from host
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: siem-filebeat
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+      - filebeat-data:/usr/share/filebeat/data
+    networks:
+      - siem-network
+    depends_on:
+      - logstash
+    restart: unless-stopped
+
+  # Cowrie Honeypot - SSH/Telnet honeypot
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: siem-cowrie
+    ports:
+      - "2222:2222"
+      - "2223:2223"
+    volumes:
+      - ./cowrie/etc:/cowrie/cowrie-git/etc:ro
+      - cowrie-data:/cowrie/cowrie-git/var
+    networks:
+      - siem-network
+    restart: unless-stopped
+
+  # Zeek - Network Traffic Analyzer
+  zeek:
+    image: zeek/zeek:latest
+    container_name: siem-zeek
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./zeek/scripts:/zeek/scripts:ro
+      - zeek-logs:/zeek/logs
+      - zeek-spool:/zeek/spool
+    environment:
+      - ZEEK_INTERFACE=${ZEEK_INTERFACE:-eth0}
+    command: >
+      sh -c "
+        echo '[zeek]' > /usr/local/zeek/etc/node.cfg &&
+        echo 'type=standalone' >> /usr/local/zeek/etc/node.cfg &&
+        echo 'host=localhost' >> /usr/local/zeek/etc/node.cfg &&
+        echo 'interface=$${ZEEK_INTERFACE}' >> /usr/local/zeek/etc/node.cfg &&
+        /usr/local/zeek/bin/zeekctl deploy &&
+        tail -f /usr/local/zeek/logs/current/*.log
+      "
+    restart: unless-stopped
+
+  # Suricata - IDS/IPS
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: siem-suricata
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./suricata/rules:/etc/suricata/rules:ro
+      - suricata-logs:/var/log/suricata
+      - suricata-data:/var/lib/suricata
+    environment:
+      - SURICATA_INTERFACE=${SURICATA_INTERFACE:-eth0}
+    command: >
+      sh -c "
+        suricata -c /etc/suricata/suricata.yaml
+        -i $${SURICATA_INTERFACE}
+        --init-errors-fatal
+      "
+    restart: unless-stopped
+
+  # Redis - Message queue for log buffering
+  redis:
+    image: redis:7-alpine
+    container_name: siem-redis
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - siem-network
+    restart: unless-stopped
+
+volumes:
+  elasticsearch-data:
+    driver: local
+  logstash-data:
+    driver: local
+  filebeat-data:
+    driver: local
+  cowrie-data:
+    driver: local
+  zeek-logs:
+    driver: local
+  zeek-spool:
+    driver: local
+  suricata-logs:
+    driver: local
+  suricata-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  siem-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

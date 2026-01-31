@@ -1,0 +1,118 @@
+filebeat.inputs:
+# Docker container logs
+- type: container
+  paths:
+    - '/var/lib/docker/containers/*/*.log'
+  processors:
+    - add_docker_metadata:
+        host: "unix:///var/run/docker.sock"
+    - decode_json_fields:
+        fields: ["message"]
+        target: ""
+        overwrite_keys: true
+        when:
+          contains:
+            message: "{"
+
+# Cowrie honeypot logs
+- type: log
+  enabled: true
+  paths:
+    - /var/lib/docker/volumes/siem-lab_cowrie-data/_data/log/cowrie/cowrie.json
+    - /var/lib/docker/volumes/siem-lab_cowrie-data/_data/log/cowrie/cowrie.log
+  fields:
+    type: cowrie
+  fields_under_root: true
+  multiline.pattern: '^\\{'
+  multiline.negate: true
+  multiline.match: after
+  json.keys_under_root: true
+  json.add_error_key: true
+
+# Zeek logs
+- type: log
+  enabled: true
+  paths:
+    - /var/lib/docker/volumes/siem-lab_zeek-logs/_data/current/*.log
+  fields:
+    type: zeek
+  fields_under_root: true
+  exclude_files: ['\\.gz$']
+
+# Suricata logs
+- type: log
+  enabled: true
+  paths:
+    - /var/lib/docker/volumes/siem-lab_suricata-logs/_data/eve.json
+    - /var/lib/docker/volumes/siem-lab_suricata-logs/_data/fast.log
+  fields:
+    type: suricata
+  fields_under_root: true
+  json.keys_under_root: true
+
+# System logs
+- type: log
+  enabled: true
+  paths:
+    - /var/log/syslog
+    - /var/log/auth.log
+    - /var/log/kern.log
+  fields:
+    type: syslog
+  fields_under_root: true
+
+# Custom application logs
+- type: log
+  enabled: true
+  paths:
+    - /var/log/siem/*.log
+  fields:
+    type: application
+  fields_under_root: true
+
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: true
+  reload.period: 10s
+
+# Modules for common services
+filebeat.modules:
+- module: system
+  syslog:
+    enabled: true
+  auth:
+    enabled: true
+
+- module: nginx
+  access:
+    enabled: true
+    var.paths: ["/var/log/nginx/access.log*"]
+  error:
+    enabled: true
+    var.paths: ["/var/log/nginx/error.log*"]
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+  - drop_fields:
+      fields: ["agent.ephemeral_id", "agent.hostname", "agent.id", "agent.name", "agent.type", "agent.version", "ecs.version", "input.type", "log.offset"]
+      ignore_missing: true
+
+output.logstash:
+  hosts: ["logstash:5044"]
+  bulk_max_size: 512
+  worker: 2
+  compression_level: 3
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+monitoring.enabled: false

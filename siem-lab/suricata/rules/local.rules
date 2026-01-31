@@ -1,0 +1,17 @@
+# Suricata Rules - SIEM Lab
+# Download full rules from: https://rules.emergingthreats.net/
+# Or use Suricata-Update: suricata-update
+
+# Example custom rules for SIEM Lab
+
+# Detect SSH brute force attempts
+alert tcp any any -> any 22 (msg:"SIEM Lab: Potential SSH Brute Force"; flow:to_server,established; content:"SSH-"; depth:4; detection_filter:track by_src, count 5, seconds 60; sid:1000001; rev:1;)
+
+# Detect suspicious outbound connections
+alert tcp any any -> any [443,80] (msg:"SIEM Lab: Suspicious HTTP/HTTPS Connection"; flow:to_server,established; content:"GET"; http_method; sid:1000002; rev:1;)
+
+# Detect port scanning
+alert tcp any any -> any any (msg:"SIEM Lab: TCP Port Scan Detected"; flow:to_server; detection_filter:track by_src, count 10, seconds 30; sid:1000003; rev:1;)
+
+# Detect DNS tunneling attempts
+alert udp any any -> any 53 (msg:"SIEM Lab: Suspicious DNS Query Length"; content:!"|00 00 01 00 01|"; offset:2; depth:5; content:"|00 00 ff 00 01|"; distance:0; detection_filter:track by_src, count 50, seconds 60; sid:1000004; rev:1;)

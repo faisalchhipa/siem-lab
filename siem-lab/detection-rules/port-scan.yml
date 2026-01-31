@@ -1,0 +1,28 @@
+# Port Scan Detection Rule
+# Detects network port scanning activity
+
+detection:
+  name: Network Port Scan
+  description: Detects potential port scanning activity from a single source IP
+  severity: medium
+  category: discovery
+  technique: T1046 - Network Service Scanning
+  
+  selection:
+    - zeek.notice.note: 'Scan::PortScan'
+    - source.ip|cidr: '!$HOME_NET'
+  
+  timeframe: 10m
+  condition: selection
+
+  falsepositives:
+    - Network vulnerability scanners
+    - Legitimate security audits
+  
+  level: medium
+
+alert:
+  - elasticsearch
+
+elasticsearch:
+  index: zeek-*
